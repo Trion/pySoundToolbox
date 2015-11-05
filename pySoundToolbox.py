@@ -1,5 +1,6 @@
 import numpy as np
 import wave
+import struct
 
 def genSine(frequency=1.0, amplitude=1.0, phaseShift=0.0):
     """
@@ -13,6 +14,7 @@ def genSine(frequency=1.0, amplitude=1.0, phaseShift=0.0):
         at time t or a numpy array with the value of the wave for all given values in t.
     """
 
+    # -j is convetion to keep the vector in the complex plane moving clockwise, when a positive frequency is given
     return lambda t: amplitude * np.exp(-1j * 2 * np.pi * frequency * t + phaseShift).imag
 
 def genArrayResponseFunc(angle, antennaPositions=np.array([[0.113, -0.036, -0.076, -0.113], [0.0, 0.0, 0.0, 0.0]]), **kwargs):
@@ -37,6 +39,13 @@ def genArrayResponseFunc(angle, antennaPositions=np.array([[0.113, -0.036, -0.07
         sineFunctions.append(genSine(**kwargs))
 
     def func(t):
+        """
+        Array response function.
+
+        @param t time, which needs to be a float or a numpy array with times
+        @return a numpy array with the elongation of the wave at times t.
+            A row represents one microphone within the array.
+        """
         if type(t) != np.ndarray:
             t = np.array([t])
 
@@ -70,7 +79,7 @@ def sample24PCM(arrayResponseFunction, amplitudeScale=1.0, samplingTime=1.0, sam
 
 def save24PCM(fileName, data, samplingRate=16000):
     """
-    Saves a 24 PCM wav file
+    Saves a 24 PCM wav file.
 
     @param fileName name of the file
     @param data already sampled data as numpy uint32 array. The cols represent the time and the rows
@@ -86,7 +95,28 @@ def save24PCM(fileName, data, samplingRate=16000):
             for k in range(data.shape[0]):
                 sample = data[k, i]
                 # Revert byte order, because wav is little endian
-                #frame = bytes([sample & 0xff, (sample >> 8) & 0xff, (sample >> 16) & 0xff])
                 frame = bytes([sample & 0xff, (sample >> 8) & 0xff, (sample >> 16) & 0xff])
                 wav.writeframes(frame)
         wav.close()
+
+def read24PCM(fileName):
+    """
+    Reads a 24 PCM wav file.
+
+    @param fileName name of the file
+    @return tupel (data, samplingRate):
+        data is a numpy int32 array with the read data. A row represents one channel.
+        samplingRate is the provided sampling rate.
+    """
+
+    with wave.open(fileName, 'r') as wav:
+        samplingRate = wav.getframerate()
+        data = np.zeros((wav.getnchannels(), wav.getnframes()), dtype=np.int32)
+        for i in range(data.shape[1]):
+            frame = wav.readframes(1)
+            for k in range(data.shape[0]):
+                # Seems pretty ugly and only works in python, but I don't know a better way to keep the Two's complement
+                data[k, i] = struct.unpack('<i', bytes([0]) + frame[k*3:k*3+3])[0] >> 8
+        wav.close()
+
+    return (data, samplingRate)

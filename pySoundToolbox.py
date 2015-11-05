@@ -33,8 +33,7 @@ def genArrayResponseFunc(angle, antennaPositions=np.array([[0.113, -0.036, -0.07
     sineFunctions = []
     delays = np.zeros(antennaPositions.shape[1])
     for i in range(antennaPositions.shape[1]):
-        # -doa because it's an incoming signal
-        delays[i] = antennaPositions[:, i].dot(-doa) / speedOfSound
+        delays[i] = antennaPositions[:, i].dot(doa) / speedOfSound
         sineFunctions.append(genSine(**kwargs))
 
     def func(t):

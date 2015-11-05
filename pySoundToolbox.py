@@ -13,7 +13,7 @@ def genSine(frequency=1.0, amplitude=1.0, phaseShift=0.0):
         at time t or a numpy array with the value of the wave for all given values in t.
     """
 
-    return lambda t: amplitude * np.exp(1j * 2 * np.pi * frequency * t + phaseShift).imag
+    return lambda t: amplitude * np.exp(-1j * 2 * np.pi * frequency * t + phaseShift).imag
 
 def genArrayResponseFunc(angle, antennaPositions=np.array([[0.113, -0.036, -0.076, -0.113], [0.0, 0.0, 0.0, 0.0]]), **kwargs):
     """

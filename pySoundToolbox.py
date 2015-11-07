@@ -15,13 +15,13 @@ def genSine(frequency=1.0, amplitude=1.0, phaseShift=0.0):
     """
 
     # -j is convetion to keep the vector in the complex plane moving clockwise, when a positive frequency is given
-    return lambda t: amplitude * np.exp(-1j * 2 * np.pi * frequency * t + phaseShift).imag
+    return lambda t: amplitude * np.exp(-1j * 2 * np.pi * frequency * t + phaseShift).real
 
 def genArrayResponseFunc(angle, antennaPositions=np.array([[0.113, -0.036, -0.076, -0.113], [0.0, 0.0, 0.0, 0.0]]), **kwargs):
     """
     Generates an array response function.
 
-    @param angle angle of source
+    @param angle angle of source in rad
     @param antennaPositions positions of the antennas to an abitrary origin as numpy array
     @param frequeny @see generateSine
     @param amplitude @see generateSine

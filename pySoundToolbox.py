@@ -4,7 +4,7 @@ import struct
 
 def genSine(frequency=1.0, amplitude=1.0, phaseShift=0.0):
     """
-    Generates a sine function.
+    Generates complex signal.
 
     @param frequency frequency of the wave in Hz
     @param amplitude amplitude of the sine
@@ -15,28 +15,52 @@ def genSine(frequency=1.0, amplitude=1.0, phaseShift=0.0):
     """
 
     # -j is convetion to keep the vector in the complex plane moving clockwise, when a positive frequency is given
-    return lambda t: amplitude * np.exp(-1j * 2 * np.pi * frequency * t + phaseShift).real
+    return lambda t: amplitude * np.exp(-1j * 2 * np.pi * frequency * t + phaseShift)
 
-def genArrayResponseFunc(angle, antennaPositions=np.array([[0.113, -0.036, -0.076, -0.113], [0.0, 0.0, 0.0, 0.0]]), **kwargs):
+def genArrayResponseFunc(angles, antennaPositions=np.array([[0.113, -0.036, -0.076, -0.113], [0.0, 0.0, 0.0, 0.0]]), frequencies=1, amplitudes=1, phaseShifts=0):
     """
     Generates an array response function.
 
-    @param angle angle of source in rad
+    @param angles numpy array with angles of the sources in rad
     @param antennaPositions positions of the antennas to an abitrary origin as numpy array
-    @param frequeny @see generateSine
-    @param amplitude @see generateSine
+    @param frequenies numpy array or float with the frequencies of the sound sources in Hz
+    @param amplitudes numpy array or float with the amplitude of the sound source signals
+    @param phaseShifts numpy array or float with the phaseShifts of the sound source sinals
     @return array response function with parameter t. t is numpy array, a row represents the response of one microphone
     """
 
-    # Antenna positions in m
+    # Amount of antennas
+    antennaNum = antennaPositions.shape[1]
+
+    # Convert signal parameters to array, to keep signal generation easy
+
+    if np.isscalar(angles):
+        angles = np.array([angles], dtype=np.float128)
+    # Amount of sources
+    sourcesNum = angles.shape[0]
+
+    if np.isscalar(frequencies):
+        frequencies = np.ones(sourcesNum, dtype=np.float128) * frequencies
+    if np.isscalar(phaseShifts):
+        phaseShifts = np.ones(sourcesNum, dtype=np.float128) * phaseShifts
+    if np.isscalar(amplitudes):
+        amplitudes = np.ones(sourcesNum, dtype=np.float128) * amplitudes
+
+    # Generate source signals
+    sourceSignals = []
+    for i in range(angles.shape[0]):
+        sourceSignals.append(genSine(frequency=frequencies[i], amplitude=amplitudes[i], phaseShift=phaseShifts[i]))
+
+    # Create steering matrix
+    # A row is the mapping of all sources to one microphone
+    # A column is the mapping of one source to all microphones
     speedOfSound = 343.2 # m/s
-    doa = np.array([np.cos(angle), np.sin(angle)]) # Normalized direction of arrival
-    # Project antenna position orthogonally onto doa to get the desired time delay
-    sineFunctions = []
-    delays = np.zeros(antennaPositions.shape[1])
-    for i in range(antennaPositions.shape[1]):
-        delays[i] = antennaPositions[:, i].dot(doa) / speedOfSound
-        sineFunctions.append(genSine(**kwargs))
+    steeringMat = np.matrix(np.empty((antennaNum, 1), dtype=np.complex256)) # TODO extend to multiple sound sources
+    for i in range(sourcesNum):
+        doa = np.array([np.cos(angles[i]), np.sin(angles[i])]) # Normalized direction of arrival
+        for k in range(antennaNum):
+            delay = antennaPositions[:, k].dot(doa) / speedOfSound
+            steeringMat[k, i] = np.exp(-1j * 2 * np.pi * frequencies[i] * delay)
 
     def func(t):
         """
@@ -49,11 +73,12 @@ def genArrayResponseFunc(angle, antennaPositions=np.array([[0.113, -0.036, -0.07
         if type(t) != np.ndarray:
             t = np.array([t])
 
-        data = np.zeros((antennaPositions.shape[1], t.shape[0]))
-        for i in range(antennaPositions.shape[1]):
-            data[i, :] = sineFunctions[i](t + delays[i])
+        data = np.matrix(np.empty((antennaNum, t.shape[0]), dtype=np.complex256))
+        for i in range(t.shape[0]):
+            sourceData = np.matrix([[sourceSignals[k](t[i])] for k in range(sourcesNum)], dtype=np.complex256)
+            data[:, i] = steeringMat * sourceData
 
-        return data
+        return np.array(data, dtype=data.dtype)
 
     return func
 
@@ -73,9 +98,9 @@ def sample24PCM(arrayResponseFunction, amplitudeScale=1.0, samplingTime=1.0, sam
 
     t = np.arange(0, samplingTime * samplingRate, dtype=np.float64) / samplingRate # Timesteps
     arrayResponse = arrayResponseFunction(t)
-    # Scaling to generate 24 PCM data
-    arrayResponse /= arrayResponse.max()
-    return np.int32(arrayResponse * ((2**23) - 1) * amplitudeScale)
+    # Scaling amplitude to generate 24 PCM data
+    arrayResponse /= np.abs(arrayResponse).max()
+    return np.int32(arrayResponse.real * ((2**23) - 1) * amplitudeScale)
 
 def save24PCM(fileName, data, samplingRate=16000):
     """
@@ -138,8 +163,8 @@ def genAnalyticSignal(data):
     h[0] = spectrum[0]
     h[n / 2] = spectrum[n / 2]
     h[1:n / 2] = 2 * spectrum[1:n / 2]
-    h[n / 2:] = 0
+    h[n / 2 + 1:] = 0
     # Step 3: Apply IFFT
-    analyticSignal = np.fft.ifft(h)
+    analyticSignal = np.fft.ifft(h).conjugate() # Need to conjugate to preserve the convention, that the vector should run clockwise for positive frequencies
 
     return analyticSignal

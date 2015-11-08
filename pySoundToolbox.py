@@ -120,3 +120,26 @@ def read24PCM(fileName):
         wav.close()
 
     return (data, samplingRate)
+
+def genAnalyticSignal(data):
+    """
+    Generates an analytic signal to given real data (converts real signal into a complex one).
+    I'm using "Computing the discrete-time analytic signal via fft" by S. Lawrence Marple.
+
+    @param data real data as 24 PCM numpy array. A row represents the response of one microphone.
+    @return the complex response of the microphone array. A row represents the response of one microphone.
+    """
+
+    # Step 1: Compute FFT
+    spectrum = np.fft.fft(data)
+    # Step 2: Half the spectrum
+    n = spectrum.shape[0]
+    h = np.empty(spectrum.shape, dtype=np.complex256)
+    h[0] = spectrum[0]
+    h[n / 2] = spectrum[n / 2]
+    h[1:n / 2] = 2 * spectrum[1:n / 2]
+    h[n / 2:] = 0
+    # Step 3: Apply IFFT
+    analyticSignal = np.fft.ifft(h)
+
+    return analyticSignal

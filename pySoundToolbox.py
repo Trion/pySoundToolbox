@@ -159,7 +159,7 @@ def genAnalyticSignal(data):
     spectrum = np.fft.fft(data)
     # Step 2: Half the spectrum
     n = spectrum.shape[0]
-    h = np.empty(spectrum.shape, dtype=np.complex256)
+    h = np.empty(n, dtype=np.complex256)
     h[0] = spectrum[0]
     h[n / 2] = spectrum[n / 2]
     h[1:n / 2] = 2 * spectrum[1:n / 2]

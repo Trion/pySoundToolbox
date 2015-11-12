@@ -21,14 +21,15 @@ def genArrayResponseFunc(angles, antennaPositions=np.array([[0.113, -0.036, -0.0
     """
     Generates an array response function.
 
-    @param angles numpy array with angles of the sources in rad
+    @param angles 1-D numpy array with angles of the sources in rad
     @param antennaPositions positions of the antennas to an abitrary origin as numpy array
     @param frequenies numpy array or float with the frequencies of the sound sources in Hz
     @param amplitudes numpy array or float with the amplitude of the sound source signals
     @param phaseShifts numpy array or float with the phaseShifts of the sound source sinals
     @return array response function with parameter t. t is numpy array, a row represents the response of one microphone
     """
-
+    # TODO extend noise
+    # TODO check plots of multiple sources and the correspoding asg results!
     # Amount of antennas
     antennaNum = antennaPositions.shape[1]
 
@@ -55,7 +56,7 @@ def genArrayResponseFunc(angles, antennaPositions=np.array([[0.113, -0.036, -0.0
     # A row is the mapping of all sources to one microphone
     # A column is the mapping of one source to all microphones
     speedOfSound = 343.2 # m/s
-    steeringMat = np.matrix(np.empty((antennaNum, 1), dtype=np.complex256)) # TODO extend to multiple sound sources
+    steeringMat = np.matrix(np.empty((antennaNum, sourcesNum), dtype=np.complex256)) # TODO extend to multiple sound sources
     for i in range(sourcesNum):
         doa = np.array([np.cos(angles[i]), np.sin(angles[i])]) # Normalized direction of arrival
         for k in range(antennaNum):
@@ -73,12 +74,12 @@ def genArrayResponseFunc(angles, antennaPositions=np.array([[0.113, -0.036, -0.0
         if type(t) != np.ndarray:
             t = np.array([t])
 
-        data = np.matrix(np.empty((antennaNum, t.shape[0]), dtype=np.complex256))
+        data = np.matrix(np.empty((antennaNum, t.shape[0]), dtype=np.complex))
         for i in range(t.shape[0]):
             sourceData = np.matrix([[sourceSignals[k](t[i])] for k in range(sourcesNum)], dtype=np.complex256)
             data[:, i] = steeringMat * sourceData
 
-        return np.array(data, dtype=data.dtype)
+        return data
 
     return func
 
@@ -156,7 +157,7 @@ def genAnalyticSignal(data):
     """
 
     # Step 1: Compute FFT
-    spectrum = np.fft.fft(data)
+    spectrum = np.fft.fft(data.flat)
     # Step 2: Half the spectrum
     n = spectrum.shape[0]
     h = np.empty(n, dtype=np.complex256)

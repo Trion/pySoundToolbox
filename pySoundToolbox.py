@@ -113,6 +113,10 @@ def save24PCM(fileName, data, samplingRate=16000):
     @param samplingRate sampling rate in Hz
     """
 
+    # Determine number of channels
+    if len(data.shape) == 1:
+        data = np.matrix(data)
+
     with wave.open(fileName, 'w') as wav:
         wav.setframerate(samplingRate)
         wav.setsampwidth(3)

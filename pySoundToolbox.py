@@ -176,3 +176,51 @@ def genAnalyticSignal(data):
     analyticSignal = np.fft.ifft(h).conjugate() # Need to conjugate to preserve the convention, that the vector should run clockwise for positive frequencies
 
     return analyticSignal
+
+class BroadbandSource:
+    """
+    entity for sochastic broadband sources
+    """
+
+    def __init__(self, sourcetype='white', transformation=lambda x: x, samplegain=1000):
+        """
+        constructor
+
+        @param sourcetype type of the emitted signal (currently only white noise is supported)
+        @param transformation a function that performes transformationen of the output signal (e.g. a bandpass filter)
+        @param samplegain amound of samples that will be generated at initilization and everytime time exceeds the number of already sampled data
+        """
+
+        assert samplegain > 0
+
+        if sourcetype != 'white':
+            raise valueerror("invalid sourcetype!")
+
+        self.sourcetype = sourcetype
+        self.transformation = transformation
+        self.samplegain = samplegain
+        self.data = np.array([], dtype=np.float)
+        self.transformeddata = np.array([], dtype=np.float)
+
+        self.generatesamples()
+
+    def generatesamples(self):
+
+        if self.sourcetype == 'white':
+            self.data = np.append(self.data, np.random.normal(size=self.samplegain))
+            self.transformeddata = self.transformation(self.data)
+
+    def get(self, m):
+        """
+        returns the mth sample of the source
+
+        @param m disrete time
+        @return the mth sample of the source
+        """
+
+        assert m >= 0
+
+        if m >= self.data.size:
+            self.generatesamples()
+
+        return self.transformeddata[m]

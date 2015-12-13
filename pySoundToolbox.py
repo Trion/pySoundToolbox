@@ -182,45 +182,145 @@ class BroadbandSource:
     entity for sochastic broadband sources
     """
 
-    def __init__(self, sourcetype='white', transformation=lambda x: x, samplegain=1000):
+    def __init__(self, sourceType='white', transformation=lambda x: x, sampleGain=1000):
         """
         constructor
 
-        @param sourcetype type of the emitted signal (currently only white noise is supported)
+        @param sourceType type of the emitted signal
+            white: white noise
+            const: constantly zero (the transformation parameter can add a constant component)
         @param transformation a function that performes transformationen of the output signal (e.g. a bandpass filter)
-        @param samplegain amound of samples that will be generated at initilization and everytime time exceeds the number of already sampled data
+        @param sampleGain amound of samples that will be generated at initilization and everytime time exceeds the number of already sampled data
         """
 
-        assert samplegain > 0
+        assert sampleGain > 0
 
-        if sourcetype != 'white':
-            raise valueerror("invalid sourcetype!")
+        if sourceType not in ('white', 'const'):
+            raise ValueError("Invalid sourceType!")
 
-        self.sourcetype = sourcetype
+        self.sourceType = sourceType
         self.transformation = transformation
-        self.samplegain = samplegain
+        self.sampleGain = sampleGain
         self.data = np.array([], dtype=np.float)
-        self.transformeddata = np.array([], dtype=np.float)
+        self.transformedData = np.array([], dtype=np.float)
 
-        self.generatesamples()
+        self.generateSamples()
 
-    def generatesamples(self):
+    def generateSamples(self):
 
-        if self.sourcetype == 'white':
-            self.data = np.append(self.data, np.random.normal(size=self.samplegain))
-            self.transformeddata = self.transformation(self.data)
+        if self.sourceType == 'white':
+            self.data = np.append(self.data, np.random.normal(size=self.sampleGain))
+        elif self.sourceType == 'const':
+            self.data = np.append(self.data, np.zeros(self.sampleGain))
+        self.transformedData = self.transformation(self.data)
 
     def get(self, m):
         """
-        returns the mth sample of the source
+        Returns the mth sample of the source or 0.0 if m is negative. This is needed, because depending on the angle of arrival of the source
+        the MicrophoneArray instance have to access samples by "negative" time (i.e. the sound did not arrive at the given time).
 
         @param m disrete time
-        @return the mth sample of the source
+        @return the mth sample of the source of 0.0 if m is negative
         """
 
-        assert m >= 0
+        if m < 0:
+            return 0
 
         if m >= self.data.size:
-            self.generatesamples()
+            self.generateSamples()
 
-        return self.transformeddata[m]
+        return self.transformedData[m]
+
+class MicrophoneArray:
+    """
+    Virtual microphone array class
+    """
+
+    def __init__(self, antennaPositions=np.array([[0.113, -0.036, -0.076, -0.113], [0.0, 0.0, 0.0, 0.0]]), samplingRate=16000, noiseStds=0.0):
+        """
+        constructor
+
+        @param antennaPositions positions of the antennas to an abitrary origin as numpy array. The positions must be given
+            by 2D coordinates. (Example: numpy.array([[x_1, x_2, x_3], [y_1, y_2, y_3]]))
+        @param samplingRate sampling rate of the microphones in Hz
+        @param noiseStds standard deviation of the white noise present (0 means no noise). If noise is a scalar all microphones
+            got the same noise level. If it is an numpy array it has to be the same size like antennaPositions in dimension 1.
+        """
+
+        # Only accept "point-sequence-like" arrays
+        if len(antennaPositions.shape) != 2 or (antennaPositions.shape[0] != 2 and antennaPositions.shape[1] != 2):
+            raise ValueError('antennaPositions dimensions does not fit requirements!')
+
+        # Set consistent shape, so I do not have to do it every time I need this array
+        if antennaPositions.shape[0] == 2:
+            self.antennaPositions = antennaPositions
+        else:
+            self.antennaPositions = antennaPositions.transpose()
+
+        # Set consistens shape, so I do not have to do it every time I need this array
+        if np.isscalar(noiseStds):
+            if not np.isreal(noiseStds):
+                raise ValueError('noiseStds must be a real value!')
+            self.noiseStds = np.empty(self.antennaPositions.shape[1])
+            self.noiseStds[:] = noiseStds
+        else:
+            if noiseStds.shape != (self.antennaPositions.shape[1],):
+                raise ValueError('noiseStds must have the shape ({:d},)'.format(self.antennaPositions.shape[1]))
+            self.noiseStds = noiseStds
+
+        if type(samplingRate) != int:
+            raise ValueError('samplingRate must be of type int!')
+        self.samplingRate = samplingRate
+
+        # Sources list with (DOA, BroadbandSource instance)
+        self.sources = []
+
+    def addSource(self, angle, source):
+        """
+        Adds a source that will be "recorded" by the microphone array.
+
+        @param angle angle of arrival in rad of the sound emitted by the source. The angle is relative to the x-axis of
+            the coordinate plane.
+        @param source a BroadbandSource object
+        """
+
+        if not np.isscalar(angle):
+            raise ValueError('Only scalar types are allowed for angle!')
+        if not np.isreal(angle):
+            raise ValueError('angle must be a real value!')
+        if type(source) != BroadbandSource:
+            raise ValueError('source type must be BroadbandSource!')
+
+        # Generate direction of arrival (DOA) from angle of arrival
+        doa = np.array([np.cos(angle), np.sin(angle)])
+
+        self.sources.append((doa, source))
+
+    def get(self, m):
+        """
+        Returns array response at time m (the mth sample). As reference the origin of the coordinate
+        coordinate system (implicitly defined by the microphone positions) is used, i.e. get(0) returns
+        is the first recording of an microphone positioned at (0, 0). Negative values for m are allowed,
+        so you can see the propagations from on microphone to another.
+
+        @param m dicrete time
+        """
+
+        speedOfSound = 343.2 # m/s
+        antennaNum = self.antennaPositions.shape[1]
+
+        response = np.zeros(self.antennaPositions.shape[1])
+
+        # Compute noiseless response
+        for doa, source in self.sources:
+            for k in range(antennaNum):
+                # Delay in samples
+                delay = int((self.antennaPositions[:, k].dot(doa) / speedOfSound) * self.samplingRate)
+                response[k] += source.get(m + delay)
+
+        # Add noise
+        for k in range(antennaNum):
+            if self.noiseStds[k] != 0:
+                response[k] += np.random.normal(scale=self.noiseStds[k])
+
+        return response

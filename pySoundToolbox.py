@@ -214,7 +214,7 @@ class BroadbandSource:
             self.data = np.append(self.data, np.zeros(self.sampleGain))
         self.transformedData = self.transformation(self.data)
 
-    def get(self, m):
+    def getSample(self, m):
         """
         Returns the mth sample of the source or 0.0 if m is negative. This is needed, because depending on the angle of arrival of the source
         the MicrophoneArray instance have to access samples by "negative" time (i.e. the sound did not arrive at the given time).
@@ -230,6 +230,32 @@ class BroadbandSource:
             self.generateSamples()
 
         return self.transformedData[m]
+
+    def get(self, m):
+        """
+        Returns a numpy array of the values of the samples identified by the values of m or 0.0 if m is negative.
+
+        @param m disrete time as iteratable or integer
+        @return the mth sample of the source of 0.0 if m is negative
+        """
+
+        if np.isscalar(m):
+            m = [m]
+
+        mTime = np.asarray(m)
+
+        if len(mTime.shape) > 1:
+            ValueError('m must be a one dimensional array!')
+
+        if mTime.dtype not in (int, np.int32, np.int64, np.int8, np.int16):
+            raise ValueError('Values of m must be integers!')
+
+        samples = np.empty(mTime.size)
+        for i in range(mTime.size):
+            samples[i] = self.getSample(mTime[i])
+
+        return samples
+
 
 class MicrophoneArray:
     """
@@ -303,20 +329,34 @@ class MicrophoneArray:
         is the first recording of an microphone positioned at (0, 0). Negative values for m are allowed,
         so you can see the propagations from on microphone to another.
 
-        @param m dicrete time
+        @param m dicrete time as integer or iteratable of integers
+        @return numpy array with the microphone array response data. The first dimensions represents
+            the microphones, the second dimension the time (e.g. [2, 5] is the fifth sample of the
+            third microphone).
         """
+
+        if np.isscalar(m):
+            m = [m]
+
+        mTime = np.asarray(m)
+
+        if mTime.dtype not in (int, np.int32, np.int64, np.int8, np.int16):
+            raise ValueError('Values of m must be integers!')
+
+        if len(mTime.shape) > 1:
+            ValueError('m must be a one dimensional array!')
 
         speedOfSound = 343.2 # m/s
         antennaNum = self.antennaPositions.shape[1]
 
-        response = np.zeros(self.antennaPositions.shape[1])
+        response = np.zeros((self.antennaPositions.shape[1], mTime.size))
 
         # Compute noiseless response
         for doa, source in self.sources:
             for k in range(antennaNum):
                 # Delay in samples
                 delay = int((self.antennaPositions[:, k].dot(doa) / speedOfSound) * self.samplingRate)
-                response[k] += source.get(m + delay)
+                response[k, :] += source.get(mTime + delay)
 
         # Add noise
         for k in range(antennaNum):

@@ -361,6 +361,6 @@ class MicrophoneArray:
         # Add noise
         for k in range(antennaNum):
             if self.noiseStds[k] != 0:
-                response[k] += np.random.normal(scale=self.noiseStds[k])
+                response[k] += np.random.normal(scale=self.noiseStds[k], size=mTime.size)
 
         return response

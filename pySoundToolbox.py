@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import logistic
 import wave
 import struct
 
@@ -188,6 +189,7 @@ class BroadbandSource:
 
         @param sourceType type of the emitted signal
             white: white noise
+            logistic: temporal logistic distributed source
             const: constantly zero (the transformation parameter can add a constant component)
         @param transformation a function that performes transformationen of the output signal (e.g. a bandpass filter)
         @param sampleGain amound of samples that will be generated at initilization and everytime time exceeds the number of already sampled data
@@ -195,7 +197,7 @@ class BroadbandSource:
 
         assert sampleGain > 0
 
-        if sourceType not in ('white', 'const'):
+        if sourceType not in ('white', 'const', 'logistic'):
             raise ValueError("Invalid sourceType!")
 
         self.sourceType = sourceType
@@ -212,6 +214,8 @@ class BroadbandSource:
             self.data = np.append(self.data, np.random.normal(size=self.sampleGain))
         elif self.sourceType == 'const':
             self.data = np.append(self.data, np.zeros(self.sampleGain))
+        elif self.sourceType == 'logistic':
+            self.data = np.append(self.data, logistic.rvs(size=self.sampleGain))
         self.transformedData = self.transformation(self.data)
 
     def getSample(self, m):

@@ -178,6 +178,142 @@ def genAnalyticSignal(data):
 
     return analyticSignal
 
+class HarmonicSource:
+    """
+    Entity for sound sources with several harmonics
+    """
+
+    def __init__(self, baseFreq, harmonicsNum=0, amplitudes=1):
+        """
+        constructor
+
+        @param baseFreq first frequency (lowest frequency)
+        @param hamonicsNum amount of harmonics, withoud base frequency
+        @param amplitudes amplitudes of the waves as scalar or numpy array. If it is a scalar all
+            harmonics including the base frequency will have the same amplitude. If it is a array
+            its size must be (harmonicsNum+1)
+        """
+
+        if np.isscalar(amplitudes):
+            amplitudes = np.ones(harmonicsNum + 1) * amplitudes
+
+        if amplitudes.shape[0] != harmonicsNum + 1:
+            raise ValueError("Shape of amplitudes must be (harmonicsNum + 1,) (current shape is ({:d},) but ({:d},) is required)!".format(amplitudes.shape[0], harmonicsNum + 1))
+
+        self.samplingRate = -1
+
+        self.sines = []
+        for i, amplitude in enumerate(amplitudes):
+            self.sines.append(genSine(frequency=(i+1)*baseFreq, amplitude=amplitude))
+
+    def getSample(self, m):
+        """
+        Returns the mth sample of the source or 0.0 if m is negative. This is needed, because depending on the angle of arrival of the source
+        the MicrophoneArray instance have to access samples by "negative" time (i.e. the sound did not arrive at the given time).
+
+        @param m disrete time
+        @return the mth sample of the source of 0.0 if m is negative
+        """
+
+        if m < 0:
+            return 0
+
+        sample = 0
+        for sine in self.sines:
+            sample += sine(m / self.samplingRate).real
+
+        return sample
+
+    def get(self, m):
+        """
+        Returns a numpy array of the values of the samples identified by the values of m or 0.0 if m is negative.
+
+        @param m disrete time as iteratable or integer
+        @return the mth sample of the source of 0.0 if m is negative
+        """
+
+        if np.isscalar(m):
+            m = [m]
+
+        mTime = np.asarray(m)
+
+        if len(mTime.shape) > 1:
+            ValueError('m must be a one dimensional array!')
+
+        if mTime.dtype not in (int, np.int32, np.int64, np.int8, np.int16):
+            raise ValueError('Values of m must be integers!')
+
+        samples = np.zeros(mTime.size)
+        for sine in self.sines:
+            samples += sine(mTime / self.samplingRate).real
+
+        return samples
+
+    def onAdd(self, array):
+        """
+        Event handler that will be executed when this source is attached to an array.
+
+        @param array MicrophoneArray object
+        """
+        self.samplingRate = array.samplingRate
+
+
+class SirenSource:
+    """
+    entity for a source behaving like a german siren (just a rough simulation)
+    """
+
+    def __init__(self, firstBaseFreq, secondBaseFreq):
+        """
+        constructor
+
+        @param firstBaseFreq first base frequency (@see HarmonicSource)
+        @param secondBaseFreq second base frequency (@see HarmonicSource)
+        """
+
+        self.firstSource = HarmonicSource(firstBaseFreq, harmonicsNum=15,\
+                                          amplitudes=np.array([1, 1, 1, 1, 1, 0.1, 0.1,\
+                                                               0.1, 0.001, 0.001, 0.001,\
+                                                               0.001, 0.001, 0.001, 0.001, 0.001]))
+        self.secondSource = HarmonicSource(secondBaseFreq, harmonicsNum=15,\
+                                           amplitudes=np.array([1, 1, 1, 1, 1, 0.1, 0.1,\
+                                                                0.1, 0.001, 0.001, 0.001,\
+                                                                0.001, 0.001, 0.001, 0.001, 0.001]))
+
+    def get(self, m):
+        """
+        Returns a numpy array of the values of the samples identified by the values of m or 0.0 if m is negative.
+
+        @param m disrete time as iteratable of consecutiv integer or an integer
+        @return the mth sample of the source of 0.0 if m is negative
+        """
+
+        if np.isscalar(m):
+            m = [m]
+
+        mTime = np.asarray(m)
+
+        if len(mTime.shape) > 1:
+            ValueError('m must be a one dimensional array!')
+
+        if mTime.dtype not in (int, np.int32, np.int64, np.int8, np.int16):
+            raise ValueError('Values of m must be integers!')
+
+        mTime %= self.samplingRate / 2 # Switch source every half second
+        samples = np.empty(mTime.size)
+
+        return samples
+
+    def onAdd(self, array):
+        """
+        Event handler that will be executed when this source is attached to an array.
+
+        @param array MicrophoneArray object
+        """
+        self.firstSource.onAdd(array)
+        self.secondSource.onAdd(array)
+
+
 class BroadbandSource:
     """
     entity for sochastic broadband sources
@@ -192,7 +328,7 @@ class BroadbandSource:
             logistic: temporal logistic distributed source
             const: constantly zero (the transformation parameter can add a constant component)
         @param transformation a function that performes transformationen of the output signal (e.g. a bandpass filter)
-        @param sampleGain amound of samples that will be generated at initilization and everytime time exceeds the number of already sampled data
+        @param sampleGain amount of samples that will be generated at initilization and everytime time exceeds the number of already sampled data
         """
 
         assert sampleGain > 0
@@ -260,6 +396,14 @@ class BroadbandSource:
 
         return samples
 
+    def onAdd(self, array):
+        """
+        Event handler that will be executed when this source is attached to an array.
+
+        @param array MicrophoneArray object
+        """
+        pass
+
 
 class MicrophoneArray:
     """
@@ -311,19 +455,18 @@ class MicrophoneArray:
 
         @param angle angle of arrival in rad of the sound emitted by the source. The angle is relative to the x-axis of
             the coordinate plane.
-        @param source a BroadbandSource object
+        @param source a source object that has a get and an onAdd method
         """
 
         if not np.isscalar(angle):
             raise ValueError('Only scalar types are allowed for angle!')
         if not np.isreal(angle):
             raise ValueError('angle must be a real value!')
-        if type(source) != BroadbandSource:
-            raise ValueError('source type must be BroadbandSource!')
 
         # Generate direction of arrival (DOA) from angle of arrival
         doa = np.array([np.cos(angle), np.sin(angle)])
 
+        source.onAdd(self)
         self.sources.append((doa, source))
 
     def get(self, m):

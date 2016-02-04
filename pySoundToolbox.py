@@ -178,6 +178,7 @@ def genAnalyticSignal(data):
 
     return analyticSignal
 
+
 class HarmonicSource:
     """
     Entity for sound sources with several harmonics
@@ -256,62 +257,6 @@ class HarmonicSource:
         @param array MicrophoneArray object
         """
         self.samplingRate = array.samplingRate
-
-
-class SirenSource:
-    """
-    entity for a source behaving like a german siren (just a rough simulation)
-    """
-
-    def __init__(self, firstBaseFreq, secondBaseFreq):
-        """
-        constructor
-
-        @param firstBaseFreq first base frequency (@see HarmonicSource)
-        @param secondBaseFreq second base frequency (@see HarmonicSource)
-        """
-
-        self.firstSource = HarmonicSource(firstBaseFreq, harmonicsNum=15,\
-                                          amplitudes=np.array([1, 1, 1, 1, 1, 0.1, 0.1,\
-                                                               0.1, 0.001, 0.001, 0.001,\
-                                                               0.001, 0.001, 0.001, 0.001, 0.001]))
-        self.secondSource = HarmonicSource(secondBaseFreq, harmonicsNum=15,\
-                                           amplitudes=np.array([1, 1, 1, 1, 1, 0.1, 0.1,\
-                                                                0.1, 0.001, 0.001, 0.001,\
-                                                                0.001, 0.001, 0.001, 0.001, 0.001]))
-
-    def get(self, m):
-        """
-        Returns a numpy array of the values of the samples identified by the values of m or 0.0 if m is negative.
-
-        @param m disrete time as iteratable of consecutiv integer or an integer
-        @return the mth sample of the source of 0.0 if m is negative
-        """
-
-        if np.isscalar(m):
-            m = [m]
-
-        mTime = np.asarray(m)
-
-        if len(mTime.shape) > 1:
-            ValueError('m must be a one dimensional array!')
-
-        if mTime.dtype not in (int, np.int32, np.int64, np.int8, np.int16):
-            raise ValueError('Values of m must be integers!')
-
-        mTime %= self.samplingRate / 2 # Switch source every half second
-        samples = np.empty(mTime.size)
-
-        return samples
-
-    def onAdd(self, array):
-        """
-        Event handler that will be executed when this source is attached to an array.
-
-        @param array MicrophoneArray object
-        """
-        self.firstSource.onAdd(array)
-        self.secondSource.onAdd(array)
 
 
 class BroadbandSource:

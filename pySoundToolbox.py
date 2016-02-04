@@ -350,6 +350,73 @@ class BroadbandSource:
         pass
 
 
+class FileSource:
+    """
+    generic source defined by a file
+    """
+
+    def __init__(self, fileName):
+        """
+        constructor
+
+        @param fileName path to uncompressed wav file, which contains the samples for this source
+        """
+
+        samples, self.fileSamplingRate = read24PCM(fileName)
+        # Only use the first channel
+        self.samples = samples[0, :]
+
+    def getSample(self, m):
+        """
+        Returns the mth sample of the source or 0.0 if m is negative. This is needed, because depending on the angle of arrival of the source
+        the MicrophoneArray instance have to access samples by "negative" time (i.e. the sound did not arrive at the given time).
+
+        @param m disrete time
+        @return the mth sample of the source of 0.0 if m is negative
+        """
+
+        if m < 0 or m >= self.samples.size:
+            return 0
+
+        return self.samples[m]
+
+    def get(self, m):
+        """
+        Returns a numpy array of the values of the samples identified by the values of m or 0.0 if m is negative.
+
+        @param m disrete time as iteratable or integer
+        @return the mth sample of the source of 0.0 if m is negative
+        """
+
+        if np.isscalar(m):
+            m = [m]
+
+        mTime = np.asarray(m)
+
+        if len(mTime.shape) > 1:
+            ValueError('m must be a one dimensional array!')
+
+        if mTime.dtype not in (int, np.int32, np.int64, np.int8, np.int16):
+            raise ValueError('Values of m must be integers!')
+
+        samples = np.empty(mTime.size)
+        for i, m in enumerate(mTime):
+            samples[i] = self.getSample(m)
+
+        return samples
+
+    def onAdd(self, array):
+        """
+        Event handler that will be executed when this source is attached to an array.
+
+        @param array MicrophoneArray object
+        """
+
+        if array.samplingRate != self.fileSamplingRate:
+            raise ValueError("Array sampling rate and file sampling rate must be the same!")
+        # TODO maybe interpolate samples if sampling rates are not compatible
+
+
 class MicrophoneArray:
     """
     Virtual microphone array class

@@ -363,8 +363,8 @@ class FileSource:
         """
 
         samples, self.fileSamplingRate = read24PCM(fileName)
-        # Only use the first channel
-        self.samples = samples[0, :]
+        # Only use the first channel and normalize
+        self.samples = samples[0, :] / samples[0, :].max()
 
     def getSample(self, m):
         """
